@@ -15,22 +15,23 @@ import rospy
 class RobotController:
     def __init__(self):
         self.robot_name = "locobot"
-        
+
         self.locobot_rate = 120
         self.control_rate = 100
-        
+
         # for BB controller
         self.base_rot_factor = 1.5
         self.base_vel_factor = 0.25
-        
+
         # band limits for torque sensors
-        self.shoulder_threshold = 80
-        self.elbow_threshold = 380
-        self.waist_threshold = 220
-        
+        self.shoulder_upper = -200
+        self.elbow_upper = -180
+        self.waist_upper = 200
+        self.waist_lower = -200
+
         # p, pd, pid controller paramerters
-        self.rot_kp = -2e-2
-        self.lin_kp = -1e-3
+        self.rot_kp = -3e-2
+        self.lin_kp = -3e-3
         self.rot_kd = -1e-4
         self.lin_kd = -1e-4
         self.rot_ki = -2e-4
@@ -39,10 +40,10 @@ class RobotController:
 
         self.tperiod = 1 / self.control_rate
         rospy.set_param(f"/{self.robot_name}/joint_state_publisher/rate", self.locobot_rate)
-        
+
         self.locobot_urdf = URDF.from_parameter_server(key=f"/{self.robot_name}/robot_description")
         self.locobot_tree = kdl_tree_from_urdf_model(self.locobot_urdf)
-        
+
         self.locobot = InterbotixLocobotXS("locobot_wx250s", "mobile_wx250s")
 
     def get_joint_effort(self):
@@ -106,31 +107,17 @@ class RobotController:
         self.waist_baseline = waist
     
     def get_linear_actuations(self):
-        # forward/backward motion
-        upper_shoulder, lower_shoulder = self.shoulder_baseline + self.shoulder_threshold, self.shoulder_baseline - self.shoulder_threshold
-        upper_elbow, lower_elbow = self.elbow_baseline + self.elbow_threshold, self.elbow_baseline - self.elbow_threshold
-        
-        middle_shoulder = lower_shoulder + (upper_shoulder - lower_shoulder) / 2
-        middle_elbow = lower_elbow + (upper_elbow - lower_elbow) / 2   
-        
-        shoulder = self.get_joint_effort()[1]
-        elbow = self.get_joint_effort()[2]
-        if shoulder > lower_shoulder and shoulder < upper_shoulder:
-            shoulder = middle_shoulder
-        if elbow > lower_elbow and elbow < upper_elbow:
-            elbow = middle_elbow
-        shoulder -= middle_shoulder
-        elbow -= middle_elbow
-        
-        combined = shoulder - 2*elbow
-        
-        return combined
+        efforts = self.get_joint_effort()
+
+        forwardEffort = max(efforts[2], self.elbow_upper) - self.elbow_upper
+        backwardEffort = max(efforts[1], self.shoulder_upper) - self.shoulder_upper
+
+        return backwardEffort - 2*forwardEffort
     
     def get_rotation_actuation(self):
         # rotation
-        upper, lower = self.waist_baseline + self.waist_threshold, self.waist_baseline - self.waist_threshold
+        upper, lower = self.waist_upper, self.waist_lower
         middle = lower + (upper - lower) / 2
-        
         waist = self.get_joint_effort()[0]
         if waist > lower and waist < upper:
             waist = middle
