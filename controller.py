@@ -85,26 +85,18 @@ class RobotController:
             time.sleep(self.tperiod)
 
     def init_controller(self):
-        self.locobot.arm.go_to_home_pose()
+        positions = [0] * self.locobot.arm.group_info.num_joints
+        positions[3] = np.radians(90) # forarm roll
+        self.locobot.arm.publish_positions(positions)
+        # self.locobot.gripper.set_pressure(1)
+        # self.locobot.gripper.close()
+        # self.locobot.arm.set_ee_pose_components(roll=np.radians(90))
+        
         self.prev_rot_error = 0
         self.prev_lin_error = 0
         self.int_rot = 0
         self.int_lin = 0
         self.prev_time = time.time()
-        
-        waist = sholder = elbow = 0
-        for _ in range(100):
-            waist += self.get_joint_effort()[0]
-            sholder += self.get_joint_effort()[1]
-            elbow += self.get_joint_effort()[2]
-            time.sleep(self.tperiod)
-        waist /= 100
-        sholder /= 100
-        elbow /= 100
-        
-        self.shoulder_baseline = sholder
-        self.elbow_baseline = elbow
-        self.waist_baseline = waist
     
     def get_linear_actuations(self):
         efforts = self.get_joint_effort()
